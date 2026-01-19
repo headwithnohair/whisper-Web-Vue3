@@ -3,20 +3,34 @@ import {pipeline,env, AutomaticSpeechRecognitionPipeline, WhisperTextStreamer, W
 import { onBeforeUnmount, onMounted,reactive,ref } from "vue";
 import AudioChoose from "./compoment/ui/AudioChoose.vue";
 import AudioPlayer from "./compoment/ui/AudioPlayer.vue";
-const worker = new Worker(
-  new URL('./worker.js', import.meta.url),
-  { type: 'module' } // 如果你的 worker 使用 ES 模块语法（如 import/export）
-);
-const transcriber =ref<AutomaticSpeechRecognitionPipeline |null>(null);
-  const cnm =()=>{
-    console.log('12312')
-  }
+// const worker = new Worker(
+//   new URL('./worker/worker-pool.js', import.meta.url)
+//   , { type: 'module' }
+// );
+const worker = new Worker( new URL('./worker/simpleWorker.js',import.meta.url),{ type: 'module' });
+worker.addEventListener('message',(e)=>console.log(e.data))
 const test =()=>{
-  worker.postMessage({pp:"asdas",op:'213',fun:cnm})
+  console.log('llll')
+  worker.postMessage({action:"init",module:'modelFileLoad',payload:payload})
+  
 }
+
   worker.onmessage = (e) => {
     console.log("Message received from worker0", e.data);
   };
+const transcriber =ref<AutomaticSpeechRecognitionPipeline |null>(null);
+
+const payload ={
+ task:'automatic-speech-recognition',
+  model:"Xenova/whisper-tiny",
+  config:{
+  dtype: 'auto' ,
+  // local_files_only: true,
+  // progress_callback: (data: any) => console.log(data),
+  device:"webgpu",
+  }
+}
+
 let windowIdx = 0;
 const audioUrl = ref<string>("");
   interface pp{
