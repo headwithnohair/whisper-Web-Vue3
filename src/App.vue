@@ -7,17 +7,22 @@ import AudioPlayer from "./compoment/ui/AudioPlayer.vue";
 //   new URL('./worker/worker-pool.js', import.meta.url)
 //   , { type: 'module' }
 // );
-const worker = new Worker( new URL('./worker/simpleWorker.js',import.meta.url),{ type: 'module' });
+const worker = new Worker( new URL('./worker/simpleWorker.ts',import.meta.url),{ type: 'module' });
 worker.addEventListener('message',(e)=>console.log(e.data))
+worker.addEventListener('messageerror',(e)=>console.log(e.data))
+worker.addEventListener('error', (e) => {
+  console.error('Worker error:', e);
+  console.error('Error message:', e.message);
+  console.error('Error filename:', e.filename);
+  console.error('Error lineno:', e.lineno);
+});
 const test =()=>{
-  console.log('llll')
   worker.postMessage({action:"init",module:'modelFileLoad',payload:payload})
-  
 }
 
-  worker.onmessage = (e) => {
-    console.log("Message received from worker0", e.data);
-  };
+  // worker.onmessage = (e) => {
+  //   console.log("Message received from worker0", e.data);
+  // };
 const transcriber =ref<AutomaticSpeechRecognitionPipeline |null>(null);
 
 const payload ={
