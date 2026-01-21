@@ -3,10 +3,11 @@ import {pipeline,env, AutomaticSpeechRecognitionPipeline, WhisperTextStreamer, W
 import { onBeforeUnmount, onMounted,reactive,ref } from "vue";
 import AudioChoose from "./compoment/ui/AudioChoose.vue";
 import AudioPlayer from "./compoment/ui/AudioPlayer.vue";
-// const worker = new Worker(
-//   new URL('./worker/worker-pool.js', import.meta.url)
-//   , { type: 'module' }
-// );
+
+const float32Array = ref<Float32Array>(new Float32Array());
+  const WHISPER_SAMPLING_RATE = 16_000;
+const MAX_AUDIO_LENGTH = 30; // seconds
+const MAX_SAMPLES = WHISPER_SAMPLING_RATE * MAX_AUDIO_LENGTH;
 const worker = new Worker( new URL('./worker/simpleWorker.ts',import.meta.url),{ type: 'module' });
 worker.addEventListener('message',(e)=>console.log(e.data))
 worker.addEventListener('messageerror',(e)=>console.log(e.data))
@@ -19,10 +20,13 @@ worker.addEventListener('error', (e) => {
 const test =()=>{
   worker.postMessage({action:"init",module:'modelFileLoad',payload:payload})
 }
+const workertest =()=>{
+  const pp={ task:float32Array.value,
+  model:"Xenova/whisper-tiny",
+  config:{}}
+  worker.postMessage({action:"generate",module:'modelFileLoad',payload:pp})
+}
 
-  // worker.onmessage = (e) => {
-  //   console.log("Message received from worker0", e.data);
-  // };
 const transcriber =ref<AutomaticSpeechRecognitionPipeline |null>(null);
 
 const payload ={
@@ -81,9 +85,9 @@ const tokenizer = transcriber.tokenizer as  WhisperTokenizer;
 const stem1 =new WhisperTextStreamer(tokenizer,{  
   skip_prompt: true,
   time_precision:0.02,
-  on_chunk_start:on_chunk_start,
-  on_chunk_end:on_chunk_end,
-  callback_function:callback_function,
+  // on_chunk_start:on_chunk_start,
+  // on_chunk_end:on_chunk_end,
+  // callback_function:callback_function,
 
 });
   const result = await transcriber(audioUrl.value, { 
@@ -95,58 +99,55 @@ const stem1 =new WhisperTextStreamer(tokenizer,{
   return_timestamps:true,
   streamer:stem1,
   // force_full_sequences:true,
-  
-  
  });
  console.log(result);
  console.log('end');
 };
-const changUrl=(newUrl:string)=>{
+const changUrl=async (newUrl:string)=>{
   audioUrl.value=newUrl;
+  // 获取音频 转化为float32Array
+  const response = await fetch(newUrl);
+  const arrayBuffer = await response.arrayBuffer();
+  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  const decoded = await audioContext.decodeAudioData(arrayBuffer);
+  const resampled = await resampleAudioBuffer(decoded, 16000);
+  // const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+  float32Array.value= resampled.getChannelData(0); 
+  console.log(float32Array.value);
 }
+async function resampleAudioBuffer(
+  audioBuffer: AudioBuffer,
+  targetSampleRate: number
+): Promise<AudioBuffer> {
+  const { sampleRate, length, numberOfChannels } = audioBuffer;
 
-function on_chunk_start(timestamps:number){
-
-          console.log('start',timestamps);
-            const item =chunks_to_process[windowIdx];
-              if(!item)
-{
-  chunks_to_process.push({
-          timestamp:[timestamps],
-          tokens: [],
-          finalised: false,
-        });
-}
-}
-
-function on_chunk_end(timestamp:number){
-  console.log('end',timestamp);
-
-  const item =chunks_to_process[windowIdx];
-  if(item)
-{
-  item.finalised=true
-}
-}
-function callback_function(tokenText:string){
-// console.log('callback_function',tokenText)
-
-  let item=chunks_to_process[windowIdx] ;
-    // console.log(item,windowIdx,chunks_to_process)
-    if(item)
-{ item.tokens.push(tokenText)
-  if(item.finalised)
-  {    
-    windowIdx++; 
+  // 如果已经是目标采样率，直接返回
+  if (sampleRate === targetSampleRate) {
+    return audioBuffer;
   }
-}else{
-  chunks_to_process.push({
-     timestamp:[],
-            tokens: [tokenText],
-            finalised: false,
-  })
+
+  // 计算新长度（四舍五入）
+  const newLength = Math.round((length * targetSampleRate) / sampleRate);
+
+  // 创建 OfflineAudioContext（注意：部分旧浏览器需加前缀）
+  const offlineCtx = new (window.OfflineAudioContext ||
+    (window as any).webkitOfflineAudioContext)(
+    numberOfChannels,
+    newLength,
+    targetSampleRate
+  );
+
+  // 创建源并连接
+  const source = offlineCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(offlineCtx.destination);
+  source.start();
+
+  // 渲染并返回结果
+  const resampledBuffer = await offlineCtx.startRendering();
+  return resampledBuffer;
 }
-}
+
 
 const startTrans =async (transcriber:AutomaticSpeechRecognitionPipeline)=>{
  console.log('======');
@@ -190,8 +191,12 @@ onBeforeUnmount(()=>{
            <t-button @click="test">
        test worker
       </t-button>
+              <t-button @click="workertest">
+        worker
+      </t-button>
       <t-row v-for="item in chunks_to_process">
-        <t-col> {{ item.timestamp }}</t-col>        <t-col> {{ item.tokens.join('') }}</t-col>
+        <t-col> {{ item.timestamp }}</t-col>        
+        <t-col> {{ item.tokens.join('') }}</t-col>
       </t-row>
   </div>
 
