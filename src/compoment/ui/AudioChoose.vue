@@ -2,7 +2,7 @@
     <div>
     <input v-show="false" type="file" accept="audio/*" @change="handleFileChange" ref="fileInputRef"/>
     <t-button  @click="triggerFileInput">
-      🎵 选择
+      🎵 choose 选择
     </t-button>
     </div>
 
